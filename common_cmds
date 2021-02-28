@@ -1,0 +1,19 @@
+ss1.    You need to ssh into sunfire (for students) :
+ssh -l nusnet_id sunfire.comp.nus.edu.sg 
+2.    From Sunfire, you can access the boards:
+ssh -l xilinx <IP address of your group's board>
+
+ makerslab-fpga-18    f8:f0:05:dd:e9:78    137.132.86.241
+
+ssh zenghao@sunfire.comp.nus.edu.sg
+
+ssh -l xilinx 137.132.86.241
+
+scp eval_server.py xilinx@137.132.86.241:~/
+scp eval_server.py zenghao@sunfire.comp.nus.edu.sg:~/
+scp Ultra96_Server.py xilinx@137.132.86.241:~/
+scp Ultra96_Server.py zenghao@sunfire.comp.nus.edu.sg:~/
+
+
+ssh -NfL 9091:localhost:9091 xilinx@137.132.86.241
+ssh -NfL 9091:localhost:9091 zenghao@sunfire.comp.nus.edu.sg
