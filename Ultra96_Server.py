@@ -13,6 +13,21 @@ import base64
 # from tkinter import Label, Tk
 # import pandas as pd
 from Crypto.Cipher import AES
+from joblib import load
+
+import dnn_utils
+import svc_utils
+import numpy as np
+import torch
+
+scaler_path = "./dnn_std_scaler.bin"
+model_path = "./dnn_model.pth"
+activities = ["dab", "gun", "elbow"]
+scaler = load(scaler_path)
+
+model = dnn_utils.DNN()
+model.load_state_dict(torch.load(model_path))
+model.eval()
 
 # Week 13 test: 8 moves, so 33 in total = (8*4) + 1 (logout)
 #ACTIONS = ['zigzag', 'rocket', 'hair', 'pushback', 'windowwipe', 'elbowlock', 'scarecrow', 'shouldershrug']
@@ -22,7 +37,7 @@ POSITIONS = ['1 2 3', '3 2 1', '2 3 1', '3 1 2', '1 3 2', '2 1 3']
 LOG_DIR = os.path.join(os.path.dirname(__file__), 'evaluation_logs')
 NUM_MOVE_PER_ACTION = 4
 N_TRANSITIONS = 6
-MESSAGE_SIZE = 3 # dancer_id, RTT and offset
+MESSAGE_SIZE = 4 # dancer_id, RTT, offset and raw_data
 
 # The IP address of the Ultra96, testing part will be "127.0.0.1"
 IP_ADDRESS = "127.0.0.1"
@@ -30,6 +45,9 @@ IP_ADDRESS = "127.0.0.1"
 PORT_NUM = [9091, 9092, 9093]
 # Group ID number
 GROUP_ID = 18
+
+#The buffer to store raw data
+
 
 class Server(threading.Thread):
     def __init__(self, ip_addr, port_num, group_id, n_moves=len(ACTIONS) * NUM_MOVE_PER_ACTION):
@@ -82,6 +100,10 @@ class Server(threading.Thread):
         self.socket.listen(4)
         self.client_address, self.secret_key = self.setup_connection() 
 
+        self.BUFFER = []
+        self.dance_move = None
+
+
         
 
     def decrypt_message(self, cipher_text):
@@ -100,10 +122,54 @@ class Server(threading.Thread):
         messages = decrypted_message.split('|')
         # print("messages decrypted:"+str(messages))
 
-        dancer_id, RTT, offset = messages[:MESSAGE_SIZE]
+        dancer_id, RTT, offset, raw_data = messages[:MESSAGE_SIZE]
         return {
-            'dancer_id':dancer_id,'RTT': RTT, 'offset':offset
+            'dancer_id':dancer_id,'RTT': RTT, 'offset':offset, "raw_data":raw_data
         }
+
+    def inference(self):
+        inputs = np.array(self.BUFFER)
+        print(inputs.shape)
+        print("Predicted dance move:", self.dance_move)
+        n_readings = 90
+        start_time_step = 30
+        num_time_steps = 60
+        if inputs.shape[0] >= n_readings:
+            # yaw pitch roll accx accy accz
+            inputs = inputs[start_time_step : start_time_step + num_time_steps]
+            inputs = np.array(
+                [
+                    [
+                        inputs[:, 0],
+                        inputs[:, 1],
+                        inputs[:, 2],
+                        inputs[:, 3],
+                        inputs[:, 4],
+                        inputs[:, 5],
+                    ]
+                ]
+            )
+            # if model_type == "svc":
+            #     inputs = svc_utils.extract_raw_data_features(
+            #         inputs
+            #     )  # extract features
+            #     inputs = svc_utils.scale_data(inputs, scaler)  # scale features
+            #     predicted = model.predict(inputs)[0]
+            #     dance_move = activities[predicted]
+            # elif model_type == "dnn":
+            inputs = dnn_utils.extract_raw_data_features(
+                inputs
+            )  # extract features
+            inputs = dnn_utils.scale_data(inputs, scaler)  # scale features
+            inputs = torch.tensor(inputs)  # convert to tensor
+            outputs = model(inputs.float())
+            _, predicted = torch.max(outputs.data, 1)
+            self.dance_move = activities[predicted]
+            
+            # else:
+            #     raise Exception("Model is not supported")
+            self.BUFFER = list()
+
 
     def run(self):
         while not self.shutdown.is_set():
@@ -115,8 +181,14 @@ class Server(threading.Thread):
                 try:
                     msg = data.decode("utf8")
                     decrypted_message = self.decrypt_message(msg)
-                    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" + "messages received from dancer " + str(decrypted_message["dancer_id"]) + ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+                    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" + "messages received from dancer " + str(decrypted_message["dancer_id"]))
                     print(decrypted_message)
+                    raw_data = decrypted_message['raw_data']
+                    raw_data = [float(x) for x in raw_data.split(" ")]
+
+                    self.BUFFER.append(raw_data)
+                    # print("BUFFER:", BUFFER)
+                    self.inference()
                     # if decrypted_message['action'] == "logout":
                     #     self.logout = True
                     #     self.stop()
@@ -253,14 +325,14 @@ def main():
     # my_server.start()
 
     dancer_server0 = Server(IP_ADDRESS, PORT_NUM[0], GROUP_ID)
-    dancer_server1 = Server(IP_ADDRESS, PORT_NUM[1], GROUP_ID)
+    # dancer_server1 = Server(IP_ADDRESS, PORT_NUM[1], GROUP_ID)
     # dancer_server2 = Server(IP_ADDRESS, PORT_NUM[2], GROUP_ID)
 
     dancer_server0.start()
     print("dancer_server0 started: IP address:" + IP_ADDRESS + " Port Number: " + str(PORT_NUM[0]) + " Group ID number: " + str(GROUP_ID))
 
-    dancer_server1.start()
-    print("dancer_server1 started: IP address:" + IP_ADDRESS + " Port Number: " + str(PORT_NUM[1]) + " Group ID number: " + str(GROUP_ID))
+    # dancer_server1.start()
+    # print("dancer_server1 started: IP address:" + IP_ADDRESS + " Port Number: " + str(PORT_NUM[1]) + " Group ID number: " + str(GROUP_ID))
 
     # dancer_server2.start()
     # print("dancer_server1 started: IP address:" + IP_ADDRESS + " Port Number: " + str(PORT_NUM[2]) + " Group ID number: " + str(GROUP_ID))
