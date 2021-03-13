@@ -6,6 +6,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 
 import numpy as np
 from Crypto.Cipher import AES
@@ -145,7 +146,15 @@ class Server(threading.Thread):
                 else:
                     raise Exception("Model is not supported")
             if production:
-                pass
+                inputs = dnn_utils.extract_raw_data_features(inputs)  # extract features
+                inputs = common_utils.scale_data(inputs, scaler)  # scale features
+                inputs = [int(x * FIXED_FACTOR) for x in inputs]
+                tc.write(inputs)
+                tc.run()
+                result = tc.get_result()
+                predicted = np.argmax(result)
+                dance_move = ACTIONS[predicted]
+                print("Predicted:", dance_move)
 
             self.BUFFER = list()
 
@@ -174,8 +183,8 @@ class Server(threading.Thread):
                     self.inference()
                     self.send_timestamp()
 
-                except Exception as e:
-                    print(e)
+                except Exception:
+                    print(traceback.format_exc())
             else:
                 print("no more data from", self.client_address)
                 self.stop()
@@ -271,6 +280,11 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", help="path to model")
     parser.add_argument("--scaler_path", help="path to scaler")
     parser.add_argument("--secret_key", default="1234123412341234", help="secret key")
+    parser.add_argument(
+        "--bit_path",
+        default="/home/xilinx/jupyter_notebooks/frontier/capstone_full.bit",
+        help="path to bit",
+    )
 
     args = parser.parse_args()
     dancer_id = args.dancer_id
@@ -281,6 +295,7 @@ if __name__ == "__main__":
     model_path = args.model_path
     scaler_path = args.scaler_path
     secret_key = args.secret_key
+    bit_path = args.bit_path
 
     print("dancer_id:", dancer_id)
     print("debug:", debug)
@@ -308,6 +323,14 @@ if __name__ == "__main__":
         else:
             raise Exception("Model is not supported")
     if production:
-        pass
+        import common_utils
+        from technoedge import FIXED_FACTOR, TechnoEdge
+
+        scaler = load(scaler_path)
+        tc = TechnoEdge(bit_path)
+        f = open(model_path, "rb")
+        wts = np.load(f)
+        tc.put_weights(wts)
+        f.close()
 
     main(dancer_id, secret_key)

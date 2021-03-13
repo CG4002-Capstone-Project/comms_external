@@ -55,6 +55,6 @@ scp Ultra96_Server.py zenghao@sunfire.comp.nus.edu.sg:~/
 ```
 - Start port forwarding for deployment
 ```
-ssh -NfL 9091:localhost:9091 xilinx@137.132.86.241
-ssh -NfL 9091:localhost:9091 zenghao@sunfire.comp.nus.edu.sg
+ssh -NfL 9091:localhost:9091 xilinx@137.132.86.241 # Run on Ultra96
+ssh -NfL 9091:localhost:9091 zenghao@sunfire.comp.nus.edu.sg # Run on laptop
 ```
