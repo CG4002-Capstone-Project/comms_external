@@ -88,6 +88,9 @@ class Client(threading.Thread):
         # print("Sending message:", encrypted_message)
         self.socket.sendall(encrypted_message)
 
+    def get_raw_data(self, raw_data):
+        return raw_data
+
     def receive_dancer_position(self):
         dancer_position = self.socket.recv(1024)
         msg = dancer_position.decode("utf8")
@@ -124,10 +127,13 @@ def main():
     RTT = 0.0
     offset = 0.0
 
+    
+
     while True:
+        raw_data = get_raw_data()
         t1 = time.time()
         print("t1: " + str(t1))
-        my_client.send_message(str(dancer_id) + '|' + str(RTT) + '|' + str(offset) + '|' )
+        my_client.send_message(str(dancer_id) + '|' + str(RTT) + '|' + str(offset) + '|' + str(raw_data) + '|')
         timestamp = my_client.receive_timestamp()
         t4 = time.time()
         print("t4: " + str(t4))
