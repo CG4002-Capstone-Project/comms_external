@@ -146,8 +146,9 @@ class Server(threading.Thread):
                 else:
                     raise Exception("Model is not supported")
             if production:
-                inputs = dnn_utils.extract_raw_data_features(inputs)  # extract features
+                inputs = common_utils.extract_raw_data_features(inputs)  # extract features
                 inputs = common_utils.scale_data(inputs, scaler)  # scale features
+                inputs = list(inputs[0])
                 inputs = [int(x * FIXED_FACTOR) for x in inputs]
                 tc.write(inputs)
                 tc.run()

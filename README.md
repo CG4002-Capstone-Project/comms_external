@@ -21,7 +21,7 @@ python3 Ultra96_Server.py --dancer_id 0 --debug True --model_type svc --model_pa
 ```
 - Run in production mode
 ```
-python3 main.py --dancer_id 0 --production True 
+sudo -E python3 Ultra96_Server.py --dancer_id 0 --production True --scaler_path ../models/wts_std_scaler.bin --model_path ../models/wts
 ```
 - Set the verbose flag to print statements and secret_key to change password
 
