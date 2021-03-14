@@ -1,6 +1,5 @@
 import argparse
 import base64
-import os
 import random
 import socket
 import sys
@@ -10,6 +9,7 @@ import traceback
 import warnings
 
 import numpy as np
+from Crypto import Random
 from Crypto.Cipher import AES
 from joblib import load
 
@@ -18,10 +18,10 @@ warnings.filterwarnings("ignore")
 # Week 9 and 11 tests: 3 moves, repeated 4 times each = 12 moves.
 ACTIONS = ["gun", "sidepump", "hair"]
 POSITIONS = ["1 2 3", "3 2 1", "2 3 1", "3 1 2", "1 3 2", "2 1 3"]
-LOG_DIR = os.path.join(os.path.dirname(__file__), "evaluation_logs")
 NUM_MOVE_PER_ACTION = 4
 N_TRANSITIONS = 6
 MESSAGE_SIZE = 4  # dancer_id, RTT, offset and raw_data
+ENCRYPT_BLOCK_SIZE = 16
 
 # The IP address of the Ultra96, testing part will be "127.0.0.1"
 IP_ADDRESS = "127.0.0.1"
@@ -29,6 +29,68 @@ IP_ADDRESS = "127.0.0.1"
 PORT_NUM = [9091, 9092, 9093]
 # Group ID number
 GROUP_ID = 18
+
+
+class Client(threading.Thread):
+    def __init__(self, ip_addr, port_num, group_id, key):
+        super(Client, self).__init__()
+
+        self.idx = 0
+        self.timeout = 60
+        self.has_no_response = False
+        self.connection = None
+        self.timer = None
+        self.logout = False
+
+        self.group_id = group_id
+        self.key = key
+
+        self.dancer_positions = ["1", "2", "3"]
+
+        # Create a TCP/IP socket and bind to port
+        self.shutdown = threading.Event()
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_address = (ip_addr, port_num)
+
+        print(
+            "Start connecting... server address: %s port: %s" % server_address,
+            file=sys.stderr,
+        )
+        self.socket.connect(server_address)
+        print("Connected")
+
+    # To encrypt the message, which is a string
+    def encrypt_message(self, message):
+        raw_message = "#" + message
+        print("raw_message: " + raw_message)
+        padded_raw_message = raw_message + " " * (
+            ENCRYPT_BLOCK_SIZE - (len(raw_message) % ENCRYPT_BLOCK_SIZE)
+        )
+        print("padded_raw_message: " + padded_raw_message)
+        iv = Random.new().read(AES.block_size)
+        secret_key = bytes(str(self.key), encoding="utf8")
+        cipher = AES.new(secret_key, AES.MODE_CBC, iv)
+        encrypted_message = base64.b64encode(
+            iv + cipher.encrypt(bytes(padded_raw_message, "utf8"))
+        )
+        print("encrypted_message: ", encrypted_message)
+        return encrypted_message
+
+    # To send the message to the sever
+    def send_message(self, message):
+        encrypted_message = self.encrypt_message(message)
+        print("Sending message:", encrypted_message)
+        self.socket.sendall(encrypted_message)
+
+    def receive_dancer_position(self):
+        dancer_position = self.socket.recv(1024)
+        msg = dancer_position.decode("utf8")
+        return msg
+
+    def stop(self):
+        self.connection.close()
+        self.shutdown.set()
+        self.timer.cancel()
 
 
 class Server(threading.Thread):
@@ -135,6 +197,10 @@ class Server(threading.Thread):
                     predicted = model.predict(inputs)[0]
                     dance_move = ACTIONS[predicted]
                     print("Predicted:", dance_move)
+                    if eval_server:
+                        my_client.send_message(
+                            "1 2 3" + "|" + dance_move + "|" + "1.5" + "|"
+                        )
                 elif model_type == "dnn":
                     inputs = dnn_utils.extract_raw_data_features(
                         inputs
@@ -145,6 +211,10 @@ class Server(threading.Thread):
                     _, predicted = torch.max(outputs.data, 1)
                     dance_move = ACTIONS[predicted]
                     print("Predicted:", dance_move)
+                    if eval_server:
+                        my_client.send_message(
+                            "1 2 3" + "|" + dance_move + "|" + "1.5" + "|"
+                        )
                 else:
                     raise Exception("Model is not supported")
             if production:
@@ -159,7 +229,6 @@ class Server(threading.Thread):
                 result = tc.get_result()
                 predicted = np.argmax(result)
                 dance_move = ACTIONS[predicted]
-                print("Predicted:", dance_move)
                 cpu_usage, fpga_usage = get_power()
                 print(
                     "CPU Usage: ",
@@ -169,6 +238,10 @@ class Server(threading.Thread):
                     "Predicted:",
                     dance_move,
                 )
+                if eval_server:
+                    my_client.send_message(
+                        "1 2 3" + "|" + dance_move + "|" + "1.5" + "|"
+                    )
 
             self.BUFFER = list()
 
@@ -299,6 +372,15 @@ if __name__ == "__main__":
         default="/home/xilinx/jupyter_notebooks/frontier/capstone_full.bit",
         help="path to bit",
     )
+    parser.add_argument(
+        "--eval_server", default=False, help="send to eval server", type=bool
+    )
+    parser.add_argument("--ip_addr", default="localhost", help="eval server ip")
+    parser.add_argument("--port_num", default="8000", help="eval server port", type=int)
+    parser.add_argument("--group_id", default="18", help="group number")
+    parser.add_argument(
+        "--key", default="1234123412341234", help="secret key", type=int
+    )
 
     args = parser.parse_args()
     dancer_id = args.dancer_id
@@ -310,6 +392,11 @@ if __name__ == "__main__":
     scaler_path = args.scaler_path
     secret_key = args.secret_key
     bit_path = args.bit_path
+    eval_server = args.eval_server
+    ip_addr = args.ip_addr
+    port_num = args.port_num
+    group_id = args.group_id
+    key = args.key
 
     print("dancer_id:", dancer_id)
     print("debug:", debug)
@@ -319,6 +406,15 @@ if __name__ == "__main__":
     print("model_path:", model_path)
     print("scaler_path:", scaler_path)
     print("secret_key:", secret_key)
+    print("eval_server:", eval_server)
+    print("bit_path:", bit_path)
+    print("ip_addr:", ip_addr)
+    print("port_num:", port_num)
+    print("group_id:", group_id)
+    print("key:", key)
+
+    if eval_server:
+        my_client = Client(ip_addr, port_num, group_id, key)
 
     if debug:
         scaler = load(scaler_path)
