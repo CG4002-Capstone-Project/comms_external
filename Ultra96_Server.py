@@ -9,6 +9,7 @@ import traceback
 import warnings
 
 import numpy as np
+import pika
 from Crypto import Random
 from Crypto.Cipher import AES
 from joblib import load
@@ -201,6 +202,10 @@ class Server(threading.Thread):
                         my_client.send_message(
                             "1 2 3" + "|" + dance_move + "|" + "1.5" + "|"
                         )
+                    if dashboard:
+                        channel.basic_publish(
+                            exchange="", routing_key="results", body=dance_move
+                        )
                 elif model_type == "dnn":
                     inputs = dnn_utils.extract_raw_data_features(
                         inputs
@@ -214,6 +219,10 @@ class Server(threading.Thread):
                     if eval_server:
                         my_client.send_message(
                             "1 2 3" + "|" + dance_move + "|" + "1.5" + "|"
+                        )
+                    if dashboard:
+                        channel.basic_publish(
+                            exchange="", routing_key="results", body=dance_move
                         )
                 else:
                     raise Exception("Model is not supported")
@@ -241,6 +250,10 @@ class Server(threading.Thread):
                 if eval_server:
                     my_client.send_message(
                         "1 2 3" + "|" + dance_move + "|" + "1.5" + "|"
+                    )
+                if dashboard:
+                    channel.basic_publish(
+                        exchange="", routing_key="results", body=dance_move
                     )
 
             self.BUFFER = list()
@@ -381,6 +394,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--key", default="1234123412341234", help="secret key", type=int
     )
+    parser.add_argument(
+        "--dashboard", default=False, help="send to dashboard", type=bool
+    )
+    parser.add_argument(
+        "--cloudamqp_url",
+        default="amqps://yjxagmuu:9i_-oo9VNSh5w4DtBxOlB6KLLOMLWlgj@mustang.rmq.cloudamqp.com/yjxagmuu",
+        help="dashboard connection",
+    )
 
     args = parser.parse_args()
     dancer_id = args.dancer_id
@@ -397,6 +418,8 @@ if __name__ == "__main__":
     port_num = args.port_num
     group_id = args.group_id
     key = args.key
+    dashboard = args.dashboard
+    cloudamqp_url = args.cloudamqp_url
 
     print("dancer_id:", dancer_id)
     print("debug:", debug)
@@ -412,9 +435,18 @@ if __name__ == "__main__":
     print("port_num:", port_num)
     print("group_id:", group_id)
     print("key:", key)
+    print("dashboard:", dashboard)
+    print("cloudamqp_url:", cloudamqp_url)
 
     if eval_server:
         my_client = Client(ip_addr, port_num, group_id, key)
+
+    if dashboard:
+        params = pika.URLParameters(cloudamqp_url)
+        params.socket_timeout = 5
+        connection = pika.BlockingConnection(params)  # Connect to CloudAMQP
+        channel = connection.channel()  # start a channel
+        channel.queue_declare(queue="results")  # Declare a queue
 
     if debug:
         scaler = load(scaler_path)
