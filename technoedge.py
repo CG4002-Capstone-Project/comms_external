@@ -116,3 +116,8 @@ class TechnoEdge:
             FC3_BIAS_ADDR // 4 : FC3_BIAS_ADDR // 4 + len(wts["fc3_bias"])
         ]
         arr[:] = to_int_arr(wts["fc3_bias"])
+
+
+def get_power():
+    rails = pynq.get_rails()
+    return (rails["PSINT_FP"].power.value, rails["INT"].power.value)
