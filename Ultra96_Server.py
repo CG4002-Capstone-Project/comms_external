@@ -146,7 +146,9 @@ class Server(threading.Thread):
                 else:
                     raise Exception("Model is not supported")
             if production:
-                inputs = common_utils.extract_raw_data_features(inputs)  # extract features
+                inputs = common_utils.extract_raw_data_features(
+                    inputs
+                )  # extract features
                 inputs = common_utils.scale_data(inputs, scaler)  # scale features
                 inputs = list(inputs[0])
                 inputs = [int(x * FIXED_FACTOR) for x in inputs]
@@ -156,6 +158,7 @@ class Server(threading.Thread):
                 predicted = np.argmax(result)
                 dance_move = ACTIONS[predicted]
                 print("Predicted:", dance_move)
+                print(get_power())
 
             self.BUFFER = list()
 
@@ -325,7 +328,7 @@ if __name__ == "__main__":
             raise Exception("Model is not supported")
     if production:
         import common_utils
-        from technoedge import FIXED_FACTOR, TechnoEdge
+        from technoedge import FIXED_FACTOR, TechnoEdge, get_power
 
         scaler = load(scaler_path)
         tc = TechnoEdge(bit_path)
