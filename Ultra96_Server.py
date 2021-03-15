@@ -144,6 +144,8 @@ class Server(threading.Thread):
         self.client_address, self.secret_key = self.setup_connection(secret_key)
 
         self.BUFFER = []
+        self.idle_state = True
+        self.idle_index = 0
 
     def decrypt_message(self, cipher_text):
         # The data format which will be used here will be "raw data | t0 | RTT | offset | start_flag | muscle_fatigue"
@@ -279,8 +281,18 @@ class Server(threading.Thread):
                     raw_data = decrypted_message["raw_data"]
                     raw_data = [float(x) for x in raw_data.split(" ")]
 
-                    self.BUFFER.append(raw_data)
-                    self.inference()
+                    mode = int(raw_data[0])
+                    if self.idle_state:
+                        if mode == 1:
+                            self.idle_index += 1
+                            if self.idle_index % 30 == 0:
+                                print("Idling")
+                        else:
+                            self.idle_state = False
+                    else:
+                        # Minus the idle state
+                        self.BUFFER.append(raw_data[1:])
+                        self.inference()
                     self.send_timestamp()
 
                 except Exception:
