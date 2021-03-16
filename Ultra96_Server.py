@@ -271,28 +271,34 @@ class Server(threading.Thread):
                 try:
                     msg = data.decode("utf8")
                     decrypted_message = self.decrypt_message(msg)
+
                     if verbose:
+                        print("RAW", msg)
                         print(
                             ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
                             + "messages received from dancer "
                             + str(decrypted_message["dancer_id"])
                         )
                         print(decrypted_message)
-                    raw_data = decrypted_message["raw_data"]
-                    raw_data = [float(x) for x in raw_data.split(" ")]
 
-                    mode = int(raw_data[0])
-                    if self.idle_state:
-                        if mode == 1:
-                            self.idle_index += 1
-                            if self.idle_index % 30 == 0:
-                                print("Idling")
+                    raw_datas = decrypted_message["raw_data"].strip().split("#")
+
+                    for raw_data in raw_datas:
+                        raw_data = [float(x) for x in raw_data.split(" ")]
+
+                        mode = int(raw_data[0])
+                        if self.idle_state:
+                            if mode == 1:
+                                self.idle_index += 1
+                                if self.idle_index % 30 == 0:
+                                    print("Idling")
+                            else:
+                                self.idle_state = False
                         else:
-                            self.idle_state = False
-                    else:
-                        # Minus the idle state
-                        self.BUFFER.append(raw_data[1:])
-                        self.inference()
+                            # Minus the idle state
+                            self.BUFFER.append(raw_data[1:])
+                            self.inference()
+
                     self.send_timestamp()
 
                 except Exception:
