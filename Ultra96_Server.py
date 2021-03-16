@@ -173,8 +173,8 @@ class Server(threading.Thread):
 
     def inference(self):
         inputs = np.array(self.BUFFER)
-        n_readings = 90
-        start_time_step = 30
+        n_readings = 120
+        start_time_step = 60
         num_time_steps = 60
         if inputs.shape[0] >= n_readings:
             # yaw pitch roll accx accy accz
